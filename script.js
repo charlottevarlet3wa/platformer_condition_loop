@@ -242,7 +242,8 @@ class Coin {
 }
 
 const player = new Player(100, 300);
-const enemies = [new Enemy(300, 350, 50, 50, 2)];
+// const enemies = [new Enemy(300, 350, 50, 50, 2)];
+const enemies = [];
 const platforms = [
     new Platform(200, 300, 100, 20, `if (playerY < platformY) {
     while (platformY <= canvas.height) {
