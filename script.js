@@ -145,7 +145,7 @@ class Player {
                     // Take damage
                     playerLives--;
                     if (playerLives <= 0) {
-                        alert("Game Over!");
+                        console.log("Game Over!");
                         // Reset game or handle game over logic
                     }
                     // Knockback effect
