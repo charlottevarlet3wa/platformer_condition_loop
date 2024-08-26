@@ -644,8 +644,8 @@ class CountdownLoopPlatform extends Platform {
     }
 
     executeAction(player) {
-        const interval = 500;  // Intervalle de temps entre chaque itération
-
+        const baseInterval = 500; // Intervalle de temps de base (500ms)
+        
         const nextIteration = () => {
             // Vérifie si le joueur est toujours sur la plateforme
             if (!this.isPlayerOnPlatform(player)) {
@@ -655,9 +655,21 @@ class CountdownLoopPlatform extends Platform {
                 this.canNextIteration = true;
                 return;
             }
-
+    
             if (this.loopCount < this.totalLoopCount) {
-                this.performAction(this.sequence[this.loopCount], player);
+                const action = this.sequence[this.loopCount];
+                this.performAction(action, player);
+    
+                // Définir l'intervalle personnalisé en fonction de l'action
+                let interval = baseInterval;
+                if (action === 'jump') {
+                    interval = 1000;
+                } else if (action === '1.5jump') {
+                    interval = 1500; // 1000ms pour 1.5jump
+                } else if (action === '2jump') {
+                    interval = 2000; // 1500ms pour 2jump
+                }
+    
                 this.loopCount++;
                 setTimeout(nextIteration, interval);
             } else {
@@ -666,9 +678,10 @@ class CountdownLoopPlatform extends Platform {
                 this.canNextIteration = true;
             }
         };
-
+    
         nextIteration();
     }
+    
 
     performAction(action, player) {
         switch (action) {
