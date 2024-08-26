@@ -992,121 +992,7 @@ class Coin {
     }
 }
 
-// class Spike {
-//     constructor(x, y, size, angle = 'up') {
-//         this.x = x;
-//         this.y = y;
-//         this.size = size; // Use size to keep it consistent for both width and height
-//         this.spikeHeight = 20; // Height of the spikes (triangles)
-//         this.angle = angle; // New parameter to determine spike orientation
-//     }
 
-//     update(player) {
-//         if (this.checkCollisionWithPlayer(player)) {
-//             playerLives--;
-//             if (playerLives <= 0) {
-//                 // resetLevel(); // Vérifie les vies et réinitialise le niveau si nécessaire
-//                 // return;
-//             } else {
-//                 switch (this.angle) {
-//                     case 'up':
-//                         player.velocityY = JUMP_POWER; // Saut normal vers le haut
-//                         break;
-//                     case 'down':
-//                         player.velocityY = -JUMP_POWER; // Saut vers le bas (peut être utile dans certaines mécaniques)
-//                         break;
-//                     case 'left':
-//                         player.velocityX = -PLAYER_SPEED * 2; // Saut vers la gauche
-//                         player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
-//                         break;
-//                     case 'right':
-//                         player.velocityX = PLAYER_SPEED * 2; // Saut vers la droite
-//                         player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
-//                         break;
-
-//                 }
-//                 player.velocityX = player.x < this.x ? -PLAYER_SPEED : PLAYER_SPEED;
-//             }
-//         }
-
-//         this.draw();
-//     }
-
-//     checkCollisionWithPlayer(player) {
-//         let collision = false;
-
-//         switch (this.angle) {
-//             case 'up':
-//                 collision = (
-//                     player.x < this.x + this.size &&
-//                     player.x + player.width > this.x &&
-//                     player.y < this.y &&
-//                     player.y + player.height > this.y - this.spikeHeight
-//                 );
-//                 break;
-//             case 'down':
-//                 collision = (
-//                     player.x < this.x + this.size &&
-//                     player.x + player.width > this.x &&
-//                     // player.y < this.y + this.spikeHeight &&
-//                     // player.y + player.height > this.y
-//                     player.y < this.y + this.spikeHeight + 15 &&
-//                     player.y > this.y
-//                 );
-//                 break;
-//             case 'left':
-//                 collision = (
-//                     player.x < this.x &&
-//                     player.x + player.width > this.x - this.spikeHeight &&
-//                     player.y < this.y + this.size &&
-//                     player.y + player.height > this.y
-//                 );
-//                 break;
-//             case 'right':
-//                 collision = (
-//                     player.x < this.x + this.spikeHeight &&
-//                     player.x + player.width > this.x &&
-//                     player.y < this.y + this.size &&
-//                     player.y + player.height > this.y
-//                 );
-//                 break;
-//         }
-
-//         return collision;
-//     }
-
-//     draw() {
-//         ctx.fillStyle = 'black';
-
-//         for (let i = 0; i < this.size; i += this.spikeHeight) {
-//             ctx.beginPath();
-//             switch (this.angle) {
-//                 case 'up':
-//                     ctx.moveTo(this.x + i, this.y);
-//                     ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y - this.spikeHeight);
-//                     ctx.lineTo(this.x + i + this.spikeHeight, this.y);
-//                     break;
-//                 case 'down':
-//                     ctx.moveTo(this.x + i, this.y + this.spikeHeight);
-//                     ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y + 2 * this.spikeHeight);
-//                     ctx.lineTo(this.x + i + this.spikeHeight, this.y + this.spikeHeight);
-//                     break;
-//                 case 'left':
-//                     ctx.moveTo(this.x, this.y + i);
-//                     ctx.lineTo(this.x - this.spikeHeight, this.y + i + this.spikeHeight / 2);
-//                     ctx.lineTo(this.x, this.y + i + this.spikeHeight);
-//                     break;
-//                 case 'right':
-//                     ctx.moveTo(this.x + this.spikeHeight, this.y + i);
-//                     ctx.lineTo(this.x + 2 * this.spikeHeight, this.y + i + this.spikeHeight / 2);
-//                     ctx.lineTo(this.x + this.spikeHeight, this.y + i + this.spikeHeight);
-//                     break;
-//             }
-//             ctx.closePath();
-//             ctx.fill();
-//         }
-//     }
-// }
 class Spike {
     constructor(x, y, size, angle = 'up') {
         this.x = x;
@@ -1114,12 +1000,17 @@ class Spike {
         this.size = size; // Use size to keep it consistent for both width and height
         this.spikeHeight = 20; // Height of the spikes (triangles)
         this.angle = angle; // New parameter to determine spike orientation
+        this.canInflictDamage = true;
+
     }
 
     update(player) {
+        console.log('caninflictdamage : ' + this.canInflictDamage)
         if (this.checkCollisionWithPlayer(player)) {
             // Décrémenter la vie du joueur
-            playerLives--;
+            if(this.canInflictDamage){
+                this.canInflictDamage = false;
+                playerLives--;
             
             // Définir le saut en fonction de l'angle du spike
             switch (this.angle) {
@@ -1138,6 +1029,15 @@ class Spike {
                     player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
                     break;
             }
+            if(playerLives <= 0){
+                resetLevel();
+                return;
+            }
+            }
+
+            setTimeout(() => {
+                this.canInflictDamage = true;
+            }, 1000);
         }
 
         this.draw();
@@ -1392,9 +1292,135 @@ function checkClickOnBlocks(mouseX, mouseY) {
 
 
 const levels = [
+    // level 1
+    {
+        player: { x: 100, y: 250 },
+        platforms: [
+            { type: 'MovePlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50] },
+            { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 0, 50]},
+            { type: 'MovePlatform', x: 50, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+            //door
+            { type: 'StablePlatform', x: 550, y: 150, width: 100, height: 20 }
+        ],
+        enemies: [
+            // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+        ],
+        coins: [
+            { x: 200, y: 225, radius: 10 },
+            { x: 100, y: 125, radius: 10 },
+            { x: 200, y: 125, radius: 10 },
+            { x: 300, y: 125, radius: 10 },
+            { x: 400, y: 125, radius: 10 },
+            { x: 500, y: 125, radius: 10 },
+        ],
+        spikes: [
+            { x: 550, y: 350, width: 100 }, // Example spike in this level
+            { x: 550, y: 250, width: 100 } // Example spike in this level
+        ],
+        doors: [
+            // test pour isOpen
+            { x: 580, y: 100, width: 40, height: 50, isOpen: false } // Example Door
+        ],
+        walls : []
+    },
+    // level 2
+    {
+        _player: { x: 280, y: 280 },
+        get player() {
+            return this._player;
+        },
+        set player(value) {
+            this._player = value;
+        },
+        platforms: [
+            { type: 'MovePlatform', x: 250, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], id: 'right-1'},
+            // { type: 'MovePlatform', x: 300, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+            { type: 'TeleportPlatform', x: 550, y: 360, width: 100, height: 20, distanceX: 0, distanceY: -150, color: [0,0,50], id: 'teleport-up-1'},
+            { type: 'TeleportPlatform', x: 50, y: 50, width: 100, height: 20, distanceX: 0, distanceY: 150, color: [0,0,50]},
+            
+            // { type: 'FallingPlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50]},
+            // { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 200, 0], id: 'horizontal-1' },
+            { type: 'ActivatePlatform', x: 400, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'right-1'},
+            { type: 'ActivatePlatform', x: 200, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'teleport-up-1'},
+            //doors
+            // { type: 'FallingPlatform', x: 50, y: 350, width: 100, height: 20},
+            // { type: 'StablePlatform', x: 550, y: 350, width: 100, height: 20}
+        ],
+        enemies: [
+            // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+        ],
+        coins: [
+            // Bas
+            { x: 100, y: 300, radius: 10 },
+            { x: 150, y: 300, radius: 10 },
+            { x: 100, y: 350, radius: 10 },
+            { x: 150, y: 350, radius: 10 },
+            { x: 125, y: 325, radius: 10 },
+            // Haut
+            { x: 600, y: 60, radius: 10 },
+            { x: 500, y: 60, radius: 10 },
+            { x: 400, y: 60, radius: 10 },
+            { x: 300, y: 60, radius: 10 },
+            { x: 200, y: 60, radius: 10 },
+        ],
+        spikes: [
+            { x: 0, y: 410, width: 700 }
+        ],
+        doors: [
+            // test pour isOpen
+            { x: 320, y: 160, width: 60, height: 100, isOpen: true } // Example Door
+        ],
+        walls: [
+            { x: 0, y: 250, width: 700, height: 10 }, // Example wall
+            { x: 0, y: 100, width: 700, height: 10 }, // Example wall
+        ]
+    },
+    // Level 3
+    {
+        _player: { x: 625, y: 250 },
+        get player() {
+            return this._player;
+        },
+        set player(value) {
+            this._player = value;
+        },  
+        platforms: [
+            // door
+            { type: 'StablePlatform', x: 0, y: 100, width: 100, height: 20},
+
+            { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 0, 50]},
+
+            // { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
+            { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
+            { type: 'CountdownLoopPlatform', x: 600, y: 300, width: 100, height: 20, color: [0,0,50], loopType: 0, sequence: ['-x', 'jump', '1.5jump', '2jump']},
+        ],
+        enemies: [
+            // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+        ],
+        coins: [
+            { x: 650, y: 50, radius: 10 },
+            { x: 650, y: 100, radius: 10 },
+            { x: 650, y: 150, radius: 10 },
+
+            { x: 375, y: 125, radius: 10 },
+            { x: 425, y: 125, radius: 10 },
+        ],
+        spikes: [
+            { x: 0, y: -30, width: 700, angle: 'down' },
+            { x: 0, y: 415, width: 700, angle: 'up' },
+            
+        ],
+        doors: [
+            { x: 25, y: 50, width: 50, height: 50, isOpen: false }
+        ],
+        walls: [
+            { x: 600, y: 0, width: 100, height: 10 }, 
+            { x: 350, y: 150, width: 100, height: 50 }, 
+        ]
+    },
     // Level 4
     {
-        _player: { x: 350, y: 350 },
+        _player: { x: 125, y: 50 },
         get player() {
             return this._player;
         },
@@ -1424,242 +1450,73 @@ const levels = [
             { x: 500, y: 125, radius: 10 },
         ],
         spikes: [
-            // { x: 0, y: -30, width: 550, angle: 'down' },
-            // { x: 0, y: 415, width: 700, angle: 'up' },
-            // { x: 550, y: 0, width: 300, angle: 'left' }, 
+            { x: 0, y: -30, width: 550, angle: 'down' },
+            { x: 0, y: 415, width: 700, angle: 'up' },
+            { x: 550, y: 0, width: 300, angle: 'left' }, 
 
             
         ],
         doors: [
-            { x: 400, y: 350, width: 50, height: 50, isOpen: true }
+            { x: 625, y: 100, width: 50, height: 50, isOpen: false }
         ],
         walls: [
             // { x: 550, y: 0, width: 10, height: 300 }, 
             // { x: 350, y: 150, width: 100, height: 50 }, 
         ]
     },
-    // {
-    //     _player: { x: 125, y: 50 },
-    //     get player() {
-    //         return this._player;
-    //     },
-    //     set player(value) {
-    //         this._player = value;
-    //     },  
-    //     platforms: [
-    //         // door
-    //         { type: 'CountdownLoopPlatform', x: 150, y: 100, width: 100, height: 20, color: [0,0,50], loopType: 0, sequence: ['+x', '+health', '2jump']},
-    //         { type: 'CountdownLoopPlatform', x: 100, y: 200, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['+x', '-health', 'open']},
-    //         { type: 'CountdownLoopPlatform', x: 50, y: 300, width: 100, height: 20, color: [0,0,50], loopType: 2, sequence: ['-health', '+x','+x', '1.5jump']},
-            
-    //         { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
-    //         { type: 'CountdownLoopPlatform', x: 600, y: 250, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['-x', '-x', '2jump']},
-    //     ],
-    //     enemies: [
-    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-    //     ],
-    //     coins: [
-
-    //         { x: 400, y: 75, radius: 10 },
-    //         { x: 450, y: 75, radius: 10 },
-    //         { x: 500, y: 75, radius: 10 },
-
-    //         { x: 400, y: 125, radius: 10 },
-    //         { x: 450, y: 125, radius: 10 },
-    //         { x: 500, y: 125, radius: 10 },
-    //     ],
-    //     spikes: [
-    //         { x: 0, y: -30, width: 550, angle: 'down' },
-    //         { x: 0, y: 415, width: 700, angle: 'up' },
-    //         { x: 550, y: 0, width: 300, angle: 'left' }, 
-
-            
-    //     ],
-    //     doors: [
-    //         { x: 625, y: 100, width: 50, height: 50, isOpen: false }
-    //     ],
-    //     walls: [
-    //         // { x: 550, y: 0, width: 10, height: 300 }, 
-    //         // { x: 350, y: 150, width: 100, height: 50 }, 
-    //     ]
-    // },
-    // Level 3
-    // {
-    //     _player: { x: 625, y: 250 },
-    //     get player() {
-    //         return this._player;
-    //     },
-    //     set player(value) {
-    //         this._player = value;
-    //     },  
-    //     platforms: [
-    //         // door
-    //         { type: 'StablePlatform', x: 0, y: 100, width: 100, height: 20},
-
-    //         { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 0, 50]},
-
-    //         // { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
-    //         { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
-    //         { type: 'CountdownLoopPlatform', x: 600, y: 300, width: 100, height: 20, color: [0,0,50], 0, sequence: ['-x', 'jump', '1.5jump', '2jump']},
-    //     ],
-    //     enemies: [
-    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-    //     ],
-    //     coins: [
-    //         { x: 650, y: 50, radius: 10 },
-    //         { x: 650, y: 100, radius: 10 },
-    //         { x: 650, y: 150, radius: 10 },
-
-    //         { x: 375, y: 125, radius: 10 },
-    //         { x: 425, y: 125, radius: 10 },
-    //     ],
-    //     spikes: [
-    //         { x: 0, y: -30, width: 700, angle: 'down' },
-    //         { x: 0, y: 415, width: 700, angle: 'up' },
-            
-    //     ],
-    //     doors: [
-    //         { x: 25, y: 50, width: 50, height: 50, isOpen: false }
-    //     ],
-    //     walls: [
-    //         { x: 600, y: 0, width: 100, height: 10 }, 
-    //         { x: 350, y: 150, width: 100, height: 50 }, 
-    //     ]
-    // },
+    
     // Level 5
-    // {
-    //     // haut
-    //     // _player: { x: 325, y: 0 },
-    //     // haut à droite
-    //     // _player: { x: 550, y: 0 },
-    //     // bas à droite
-    //     _player: { x: 575, y: 300 },
-    //     get player() {
-    //         return this._player;
-    //     },
-    //     set player(value) {
-    //         this._player = value;
-    //     },
-    //     platforms: [
-    //         { type: 'LoopMovePlatform', x: 300, y: 50, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'left', 'down', 'right', 'right', 'down', 'down', 'up', 'right']},
-    //         { type: 'LoopMovePlatform', x: 550, y: 100, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'down', 'right', 'down', 'down', 'up', 'right']},
-    //         { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
-    //         { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
-    //         { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: 0, distanceY: -1, color: [0,0,50]},
-    //         { type: 'MovePlatform', x: 100, y: 100, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+    {
+        // haut
+        // _player: { x: 325, y: 0 },
+        // haut à droite
+        // _player: { x: 550, y: 0 },
+        // bas à droite
+        _player: { x: 575, y: 300 },
+        get player() {
+            return this._player;
+        },
+        set player(value) {
+            this._player = value;
+        },
+        platforms: [
+            { type: 'LoopMovePlatform', x: 300, y: 50, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'left', 'down', 'right', 'right', 'down', 'down', 'up', 'right']},
+            { type: 'LoopMovePlatform', x: 550, y: 100, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'down', 'right', 'down', 'down', 'up', 'right']},
+            { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
+            { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
+            { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: 0, distanceY: -1, color: [0,0,50]},
+            { type: 'MovePlatform', x: 100, y: 100, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
             
-    //     ],
-    //     enemies: [
-    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-    //     ],
-    //     coins: [
-    //         // { x: 100, y: 300, radius: 10 },
-    //     ],
-    //     spikes: [
-    //         // Bas à gauche
-    //         { x: 100, y: 150, width: 100, angle: 'up' },
-    //         { x: 180, y: 150, width: 100, angle: 'right' },
-    //         { x: 210, y: 250, width: 90, angle: 'up' },
+        ],
+        enemies: [
+            // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+        ],
+        coins: [
+            // { x: 100, y: 300, radius: 10 },
+        ],
+        spikes: [
+            // Bas à gauche
+            { x: 100, y: 150, width: 100, angle: 'up' },
+            { x: 180, y: 150, width: 100, angle: 'right' },
+            { x: 210, y: 250, width: 90, angle: 'up' },
 
-    //         // Bas
-    //         { x: 0, y: 410, width: 700, angle: 'up' },
+            // Bas
+            { x: 0, y: 410, width: 700, angle: 'up' },
             
-    //         // Droite
-    //         { x: 450, y: 200, width: 50, angle: 'up' },
-    //         { x: 450, y: 240, width: 50, angle: 'down' },
+            // Droite
+            { x: 450, y: 200, width: 50, angle: 'up' },
+            { x: 450, y: 240, width: 50, angle: 'down' },
             
-    //     ],
-    //     doors: [
-    //         { x: 450, y: 200, width: 50, height: 50, isOpen: true }
-    //     ],
-    //     walls: [
-    //         // sous porte
-    //         { x: 450, y: 250, width: 50, height: 10 }, 
-    //         { x: 500, y: 200, width: 10, height: 60 }, 
-    //     ]
-    // },
-    // level 2
-    // {
-    //     _player: { x: 280, y: 280 },
-    //     get player() {
-    //         return this._player;
-    //     },
-    //     set player(value) {
-    //         this._player = value;
-    //     },
-    //     platforms: [
-    //         { type: 'MovePlatform', x: 250, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], id: 'right-1'},
-    //         // { type: 'MovePlatform', x: 300, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
-    //         { type: 'TeleportPlatform', x: 550, y: 360, width: 100, height: 20, distanceX: 0, distanceY: -150, color: [0,0,50], id: 'teleport-up-1'},
-    //         { type: 'TeleportPlatform', x: 50, y: 50, width: 100, height: 20, distanceX: 0, distanceY: 150, color: [0,0,50]},
-            
-    //         // { type: 'FallingPlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50]},
-    //         // { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 200, 0], id: 'horizontal-1' },
-    //         { type: 'ActivatePlatform', x: 400, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'right-1'},
-    //         { type: 'ActivatePlatform', x: 200, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'teleport-up-1'},
-    //         //doors
-    //         // { type: 'FallingPlatform', x: 50, y: 350, width: 100, height: 20},
-    //         // { type: 'StablePlatform', x: 550, y: 350, width: 100, height: 20}
-    //     ],
-    //     enemies: [
-    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-    //     ],
-    //     coins: [
-    //         // Bas
-    //         { x: 100, y: 300, radius: 10 },
-    //         { x: 150, y: 300, radius: 10 },
-    //         { x: 100, y: 350, radius: 10 },
-    //         { x: 150, y: 350, radius: 10 },
-    //         { x: 125, y: 325, radius: 10 },
-    //         // Haut
-    //         { x: 600, y: 60, radius: 10 },
-    //         { x: 500, y: 60, radius: 10 },
-    //         { x: 400, y: 60, radius: 10 },
-    //         { x: 300, y: 60, radius: 10 },
-    //         { x: 200, y: 60, radius: 10 },
-    //     ],
-    //     spikes: [
-    //         { x: 0, y: 410, width: 700 }
-    //     ],
-    //     doors: [
-    //         // test pour isOpen
-    //         { x: 320, y: 160, width: 60, height: 100, isOpen: true } // Example Door
-    //     ],
-    //     walls: [
-    //         { x: 0, y: 250, width: 700, height: 10 }, // Example wall
-    //         { x: 0, y: 100, width: 700, height: 10 }, // Example wall
-    //     ]
-    // },
-    // level 1
-    // {
-    //     player: { x: 100, y: 250 },
-    //     platforms: [
-    //         { type: 'MovePlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50] },
-    //         { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 200, 0]},
-    //         { type: 'MovePlatform', x: 50, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50]},
-    //         //door
-    //         { type: 'StablePlatform', x: 550, y: 150, width: 100, height: 20 }
-    //     ],
-    //     enemies: [
-    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-    //     ],
-    //     coins: [
-    //         { x: 200, y: 225, radius: 10 },
-    //         { x: 100, y: 125, radius: 10 },
-    //         { x: 200, y: 125, radius: 10 },
-    //         { x: 300, y: 125, radius: 10 },
-    //         { x: 400, y: 125, radius: 10 },
-    //         { x: 500, y: 125, radius: 10 },
-    //     ],
-    //     spikes: [
-    //         { x: 550, y: 350, width: 100 }, // Example spike in this level
-    //         { x: 550, y: 250, width: 100 } // Example spike in this level
-    //     ],
-    //     doors: [
-    //         // test pour isOpen
-    //         { x: 580, y: 100, width: 40, height: 50, isOpen: false } // Example Door
-    //     ]
-    // }
+        ],
+        doors: [
+            { x: 450, y: 200, width: 50, height: 50, isOpen: true }
+        ],
+        walls: [
+            // sous porte
+            { x: 450, y: 250, width: 50, height: 10 }, 
+            { x: 500, y: 200, width: 10, height: 60 }, 
+        ]
+    }
 ];
 
 
@@ -1711,6 +1568,7 @@ function loadLevel(levelIndex) {
     // Créer les plateformes
     levelData.platforms.forEach(data => {
         let platform;
+        let door = doors[0];
         switch(data.type) {
             case 'FallingPlatform':
                 platform = new FallingPlatform(data.x, data.y, data.width, data.height, data.color);
@@ -1725,7 +1583,7 @@ function loadLevel(levelIndex) {
                 platform = new LoopMovePlatform(data.x, data.y, data.width, data.height, data.color, data.sequence);
                 break;
             case 'CountdownLoopPlatform':
-                let door = doors[0];
+                // let door = doors[0];
                 platform = new CountdownLoopPlatform(data.x, data.y, data.width, data.height, data.color, data.loopType, data.sequence, door);
                 break;
             case 'TeleportPlatform':
@@ -1736,7 +1594,7 @@ function loadLevel(levelIndex) {
                 platform = new ActivatePlatform(data.x, data.y, data.width, data.height, data.color, targetPlatform);
                 break;
             case 'OpenDoorPlatform':
-                door = doors[0];
+                // door = doors[0];
                 platform = new OpenDoorPlatform(data.x, data.y, data.width, data.height, data.color, door);
                 break;
         }
