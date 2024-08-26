@@ -2,6 +2,9 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const messageBox = document.getElementById('messageBox');
 
+const canvasWidth = canvas.width;
+const canvasHeight = canvas.height;
+
 const GRAVITY = 0.3;
 const JUMP_POWER = -8;
 const PLAYER_SPEED = 2;
@@ -9,19 +12,24 @@ const PLAYER_SPEED = 2;
 let collectedCoins = 0;
 let playerLives = 3;
 
+let isGamePaused = false;
+
 let keys = {};
 
-document.addEventListener('keydown', (event) => {
-    keys[event.code] = true;
-});
+const platformColors = {
+    red : [],
+    green : [],
+    blue : [],
+    pink : [],
+    // etc.
+}
 
-document.addEventListener('keyup', (event) => {
-    keys[event.code] = false;
-});
+// 
 
 let jumpKeyPressed = false;
 
 document.addEventListener('keydown', (event) => {
+    if (isGamePaused) return; // Prevent actions if the game is paused
     keys[event.code] = true;
     if (event.code === 'KeyW' && !jumpKeyPressed) {
         jumpKeyPressed = true;
@@ -33,11 +41,13 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('keyup', (event) => {
+    if (isGamePaused) return; // Prevent actions if the game is paused
     keys[event.code] = false;
     if (event.code === 'KeyW') {
         jumpKeyPressed = false;
     }
 });
+
 
 document.addEventListener('keydown', (event) => {
     if (event.code === 'KeyL' && player.nearPlatform && player.platformMessage) {
@@ -45,6 +55,59 @@ document.addEventListener('keydown', (event) => {
         Prism.highlightAll();
     }
 });
+
+class Wall {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    update(entity) {
+        this.checkCollision(entity);
+        this.draw();
+    }
+
+    checkCollision(entity) {
+        const entityRight = entity.x + entity.width;
+        const entityBottom = entity.y + entity.height;
+        const wallRight = this.x + this.width;
+        const wallBottom = this.y + this.height;
+
+        // Collision detection logic
+        if (entityRight > this.x && entity.x < wallRight &&
+            entityBottom > this.y && entity.y < wallBottom) {
+
+            const overlapX = Math.min(wallRight - entity.x, entityRight - this.x);
+            const overlapY = Math.min(wallBottom - entity.y, entityBottom - this.y);
+
+            if (overlapX < overlapY) {
+                if (entity.x < this.x) {
+                    entity.x = this.x - entity.width; // Left collision
+                } else {
+                    entity.x = wallRight; // Right collision
+                }
+                entity.velocityX = 0;
+            } else {
+                if (entity.y < this.y) {
+                    entity.y = this.y - entity.height; // Top collision
+                    entity.velocityY = 0;
+                    entity.onGround = true;
+                } else {
+                    entity.y = wallBottom; // Bottom collision
+                    entity.velocityY = 0;
+                }
+            }
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+}
+
 
 class Player {
     constructor(x, y) {
@@ -59,95 +122,82 @@ class Player {
         this.platformMessage = null;
     }
 
-    update(platforms, coins, enemies) {
+    update(platforms, coins, enemies, walls) {
         this.velocityY += GRAVITY;
         this.x += this.velocityX;
         this.y += this.velocityY;
-    
+
         this.onGround = false;
         this.nearPlatform = false;
         this.platformMessage = null;
-    
-        // Détection de la plateforme la plus proche
+
         let closestPlatform = null;
         let closestDistance = Infinity;
-    
+
         for (let platform of platforms) {
-            // Check collision with the top of the platform
-            if (this.y + this.height > platform.y && this.y + this.height < platform.y + platform.height && this.x + this.width > platform.x && this.x < platform.x + platform.width) {
-                if (!platform.isTrapped) {
-                    this.y = platform.y - this.height;
-                    this.velocityY = 0;
-                    this.onGround = true;
-                } else if (platform.isTrapped && !platform.triggerFall) {
-                    this.y = platform.y - this.height;
-                    this.velocityY = 0;
-                    this.onGround = true;
-                    platform.triggerFall = true;
-                }
+            if (this.y + this.height > platform.y && this.y + this.height < platform.y + platform.height &&
+                this.x + this.width > platform.x && this.x < platform.x + platform.width) {
+                this.y = platform.y - this.height;
+                this.velocityY = 0;
+                this.onGround = true;
             }
-            // Check collision with the bottom of the platform
-            else if (this.y < platform.y + platform.height && this.y > platform.y && this.x + this.width > platform.x && this.x < platform.x + platform.width) {
-                this.y = platform.y + platform.height;
-                this.velocityY = GRAVITY;
-            }
-    
-            // Calcul de la distance au centre de la plateforme
+
             const platformCenterX = platform.x + platform.width / 2;
             const platformCenterY = platform.y + platform.height / 2;
             const playerCenterX = this.x + this.width / 2;
             const playerCenterY = this.y + this.height / 2;
-    
+
             const distance = Math.hypot(playerCenterX - platformCenterX, playerCenterY - platformCenterY);
-    
-            // Détecter la plateforme la plus proche à une distance détectable
+
             if (distance < closestDistance && this.x > platform.x && this.x < platform.x + platform.width &&
                 this.y + this.height > platform.y - 100 && this.y < platform.y + platform.height + 100) {
-            // if (distance < closestDistance && this.x > platform.x - 50 && this.x < platform.x + platform.width - 50 &&
-            //     this.y + this.height > platform.y - 100 && this.y < platform.y + platform.height + 100) {
                 closestDistance = distance;
                 closestPlatform = platform;
             }
         }
-    
-        // Si une plateforme proche est trouvée, mettre à jour l'état du joueur
+
         if (closestPlatform) {
             this.nearPlatform = true;
             this.platformMessage = closestPlatform;
             closestPlatform.isDetected = true;
         }
-    
-        // Réinitialiser l'état des autres plateformes
+
         for (let platform of platforms) {
             if (platform !== closestPlatform) {
                 platform.isDetected = false;
             }
             platform.update(this);
         }
-    
-        // Si le joueur tombe en bas de l'écran, le maintenir sur le sol
+
+        for (let wall of walls) {
+            wall.update(this);  // Check collisions with walls
+        }
+
         if (this.y + this.height > canvas.height) {
             this.y = canvas.height - this.height;
             this.velocityY = 0;
             this.onGround = true;
         }
-    
-        // Gestion des mouvements horizontaux du joueur
-        if (keys['KeyA']) { // Q
+
+        if (keys['KeyA']) {
             this.velocityX = -PLAYER_SPEED;
+            if(this.x <= 0) { 
+                this.x = 0;
+            }
         } else if (keys['KeyD']) {
             this.velocityX = PLAYER_SPEED;
+            if(this.x >= canvasWidth - this.width) {
+                this.x = canvasWidth - this.width;
+            }
         } else {
             this.velocityX = 0;
         }
-    
-        // Gestion des autres interactions
+
         this.collectCoins(coins);
         this.checkEnemyCollisions(enemies);
-    
-        // Dessiner le joueur
         this.draw();
     }
+
     
 
     collectCoins(coins) {
@@ -179,12 +229,13 @@ class Player {
                     // Take damage
                     playerLives--;
                     if (playerLives <= 0) {
-                        console.log("Game Over!");
-                        // Reset game or handle game over logic
+                        resetLevel();
+                        return;
+                    } else {
+                        // Knockback effect
+                        this.velocityX = this.x < enemy.x ? -PLAYER_SPEED : PLAYER_SPEED;
+                        this.velocityY = JUMP_POWER / 2;
                     }
-                    // Knockback effect
-                    this.velocityX = this.x < enemy.x ? -PLAYER_SPEED : PLAYER_SPEED;
-                    this.velocityY = JUMP_POWER / 2;
                 }
             }
         }
@@ -225,57 +276,598 @@ class Enemy {
 
 // PLATFORMS
 class Platform {
-    constructor(x, y, width, height, message, isTrapped = false) {
+    constructor(x, y, width, height, color = [80,80,80]) {
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
-        this.message = message;
-        this.isTrapped = isTrapped;
-        this.fallSpeed = 0;
-        this.triggerFall = false;
         this.isDetected = false;
+        this.isDetectedByActivate = false;
+        this.typeChanged = false;
+        this.isActivated = false;
+        this.color = color
     }
 
-    update() {
-        if (this.isTrapped && this.triggerFall) {
-            this.y += this.fallSpeed;
-            this.fallSpeed += GRAVITY;
+    activate() {
+        this.isActivated = true;
+    }
+
+    update(player, walls = []) {
+        // Vérifier les collisions avec les murs
+        for (let wall of walls) {
+            wall.checkCollision(this);
         }
+
         this.draw();
     }
 
     draw() {
-        // ctx.fillStyle = 'black';
-        ctx.fillStyle = this.isDetected ? 'rgb(80,80,80)' : 'black'; // Couleur change si détectée
-        // ctx.fillRect(this.x, this.y, this.width, this.height);
-        drawRoundedRect(ctx, this.x, this.y, this.width, this.height, 10); // Ajout du rayon de 10 pixels pour les coins arrondis
+         const opacity = this.isDetected || this.isDetectedByActivate ? 0.2 : 1;  // 0.5 for 50% opacity when detected, 1 for full opacity otherwise
+        ctx.fillStyle = `rgba(${this.color[0]},${this.color[1]},${this.color[2]},${opacity})`;  // Adjust color and opacity
+        drawRoundedRect(ctx, this.x, this.y, this.width, this.height, 10);  // Draw the rectangle with rounded corners
+    
+    }
 
+    isPlayerOnPlatform(player) {
+        return player.y + player.height === this.y &&
+               player.x + player.width > this.x &&
+               player.x < this.x + this.width;
     }
 }
 
-class HorizontalPlatform extends Platform {
-    constructor(x, y, width, height, distance) {
-        super(x, y, width, height, '', false);
-        this.message = 'This is a horizontal platform that moves right when you press L.'; // Message par défaut
+
+
+class TeleportPlatform extends Platform {
+    constructor(x, y, width, height, color, distanceX = 0, distanceY = 0) {
+        super(x, y, width, height, color, '', false);
+        this.distanceX = distanceX;
+        this.distanceY = distanceY;
+        this.originalX = x; // To remember the original position
+        this.originalY = y;
+        this.isMoving = false;
+        this.canBeActivated = true;
+        this.message = 
+`action(){
+    this.x += ${this.distanceX};
+    this.y += ${this.distanceY};
+}`; // Message par défaut
+    }
+
+    update(player) {
+        // Check if the player is on the platform and presses the 'M' key
+        if ((((this.isPlayerOnPlatform(player) && keys['Semicolon']) || this.isActivated) && this.canBeActivated)) {
+            this.canBeActivated = false;
+            
+            console.log('move')
+            console.log('isActivated : ' + this.isActivated)
+            console.log('canBeActivated : ' + this.canBeActivated)
+            this.canBeActivated = false;
+            const gapX = this.x - player.x;
+            const gapY = this.y - player.y;
+            this.x = this.originalX + this.distanceX;
+            this.y = this.originalY + this.distanceY;
+
+            if(this.y <= 0) {
+                this.y = canvasHeight - 50; 
+            }
+            if(this.y >= canvasHeight) {
+                this.y = 50;
+            }
+
+            if(!this.isActivated){
+                player.x = this.x - gapX; 
+                player.y = this.y - gapY; 
+                if(player.x <= 0) {
+                    player.x = 0;
+                }
+                if(player.x >= canvasWidth - player.width) {
+                    player.x = canvasWidth - player.width;
+                }
+                
+            }
+
+            setTimeout(() => {
+                this.originalX = this.x;
+                this.originalY = this.y;
+                this.isActivated = false;
+                this.canBeActivated = true;
+            }, 200)
+        }
+
+        this.draw();
+    }
+
+
+
+}
+
+class MovePlatform extends Platform {
+    constructor(x, y, width, height, color, distanceX = 0, distanceY = 0) {
+        super(x, y, width, height, color, '', false);
+        this.distanceX = distanceX;
+        this.distanceY = distanceY;
         this.originalX = x; // To remember the original position
         this.isMoving = false;
-        this.distance = distance;
+        this.message = 
+`action(){
+    this.x += ${this.distanceX};
+    this.y += ${this.distanceY};
+}`; // Message par défaut
     }
 
     update(player) {
         // Check if the player is on the platform and presses the 'L' key
-        if (this.isPlayerOnPlatform(player) && keys['Semicolon'] && !this.isMoving) {
-            this.moveRight();
+        if (((this.isPlayerOnPlatform(player) && keys['Semicolon']) || this.isActivated) && !this.isMoving) {
+            this.move();
         }
 
         if (this.isMoving) {
-            this.x += this.distance; 
-            player.x += this.distance; 
-
-            if (this.x >= this.originalX + 200) {
-                this.isMoving = false; // Stop moving after 200px
+            this.x += this.distanceX; 
+            this.y += this.distanceY; 
+            if(this.x >= canvasWidth) {
+                this.x = 0 - this.width + 15 ;
             }
+            if(!this.isActivated && player.x > 0 && player.x < canvasWidth - player.width){
+                player.x += this.distanceX; 
+                player.y += this.distanceY; 
+            }
+
+            this.isMoving = false; 
+            this.isActivated = false;
+        }
+
+        this.draw();
+    }
+
+
+
+    move() {
+        this.isMoving = true;
+    }
+}
+
+class LoopMovePlatform extends Platform {
+    constructor(x, y, width, height, color, sequence = []) {
+        super(x, y, width, height, color, '', false);
+        this.distanceX = 1;
+        this.distanceY = 1;
+        this.originalX = x; // To remember the original position
+        this.isMoving = false;
+        this.canBeActivated = true;
+        this.isLoopMoving = false;
+        // this.sequence = ['right', 'up', 'left', 'down'];
+        this.sequence = sequence;
+        // this.sequence = ['right', 'right', 'left', 'down'];
+        this.sequenceData = [
+            // {
+            //     targetX : 200,
+            //     targetY : 350
+            // },
+            // {
+            //     targetX : 200,
+            //     targetY : 300
+            // },
+            // {
+            //     targetX : 0,
+            //     targetY : 300
+            // },
+            // {
+            //     targetX : 0,
+            //     targetY : 350
+            // }
+    ];
+        this.sequenceIndex = 0;
+        this.onTargetX = false;
+        this.onTargetY = false;
+        this.message = 
+`action(){
+    const i = 0;
+    while(i < 50)){
+        this.x++;
+    }
+}`; // Message par défaut
+this.message = this.generateMessage()
+    }
+
+    update(player) {
+        // Check if the player is on the platform and presses the 'L' key
+        if (((this.isPlayerOnPlatform(player) && keys['Semicolon']) || this.isActivated) && !this.isMoving && this.canBeActivated) {
+            this.createSequenceData();
+            // console.log(this.sequenceData);
+            this.canBeActivated = false;
+            this.isLoopMoving = true;
+            
+            // this.move();
+        }
+
+        if(this.isLoopMoving) {
+            // console.log('index :' + this.sequenceIndex)
+            if(this.x < this.sequenceData[this.sequenceIndex].targetX){
+                this.onTargetX = false;
+                this.x += this.distanceX; 
+                player.x += this.distanceX;
+            } else if(this.x > this.sequenceData[this.sequenceIndex].targetX){
+                this.onTargetX = false;
+                this.x -= this.distanceX;
+                player.x -= this.distanceX;
+            } else {
+                this.onTargetX = true;
+            }
+            // Move on Y axis
+            if(this.y < this.sequenceData[this.sequenceIndex].targetY){
+                this.onTargetY = false;
+                this.y += this.distanceY; 
+                player.y += this.distanceY;
+            } else if(this.y > this.sequenceData[this.sequenceIndex].targetY){
+                this.onTargetY = false;
+                this.y -= this.distanceY;
+                player.y -= this.distanceY;
+            } else {
+                this.onTargetY = true;
+            }
+            // When reaching target, increment index or stop the loop
+            if(this.onTargetX && this.onTargetY){
+                if(this.sequenceIndex < this.sequenceData.length){
+                    this.sequenceIndex++;
+                    if(this.sequenceIndex == this.sequenceData.length) {
+                        this.sequenceIndex = 0;
+                        this.isLoopMoving = false;
+                        this.canBeActivated = true;
+                    }
+                } else {
+                    this.sequenceIndex = 0;
+                    this.isLoopMoving = false;
+                    this.canBeActivated = true;
+                }
+            }
+        }
+
+
+        this.draw();
+    }
+
+    createSequenceData(){
+        this.sequenceData = [];
+
+        let baseX = this.x;
+        let baseY = this.y;
+        let targetX = baseX;
+        let targetY = baseY;
+
+        this.sequence.forEach(dir => {
+            switch(dir) {
+                case 'left':
+                    targetX -= 50;
+                    baseX = targetX;
+                    this.sequenceData.push({targetX, targetY: baseY});
+                    break;
+                case 'right':
+                    targetX += 50;
+                    baseX = targetX;
+                    this.sequenceData.push({targetX, targetY: baseY});
+                    break;
+                case 'up':
+                    targetY -= 50;
+                    baseY = targetY;
+                    this.sequenceData.push({targetX : baseX, targetY});
+                    break;
+                case 'down':
+                    targetY += 50;
+                    baseY = targetY;
+                    this.sequenceData.push({targetX : baseX, targetY});
+                    break;
+            }
+        });
+        console.log(this.sequenceData)
+    }
+    generateMessage() {
+        let message = 'action(){\n';
+        let suite = 1;
+        let lastDir = this.sequence[0]; // Start with the first direction
+    
+        this.sequence.forEach((dir, i) => {
+            if (i === 0) {
+                // Skip the first element since we already initialized lastDir with it
+                return;
+            }
+    
+            if (dir === lastDir) {
+                // If the direction is the same as the last one, increment the suite
+                suite++;
+            } else {
+                // If the direction changes, output the accumulated movement and reset the suite
+                switch (lastDir) {
+                    case 'right':
+                        message += `    for(let i = 0; i < ${suite * 50}; i++) { this.x++; }\n`;
+                        break;
+                    case 'left':
+                        message += `    for(let i = 0; i < ${suite * 50}; i++) { this.x--; }\n`;
+                        break;
+                    case 'up':
+                        message += `    for(let i = 0; i < ${suite * 50}; i++) { this.y--; }\n`;
+                        break;
+                    case 'down':
+                        message += `    for(let i = 0; i < ${suite * 50}; i++) { this.y++; }\n`;
+                        break;
+                }
+                suite = 1; // Reset suite for the new direction
+                lastDir = dir; // Update lastDir to the current direction
+            }
+        });
+    
+        // Handle the final direction in the sequence
+        switch (lastDir) {
+            case 'right':
+                message += `    for(let i = 0; i < ${suite * 50}; i++) { this.x++; }\n`;
+                break;
+            case 'left':
+                message += `    for(let i = 0; i < ${suite * 50}; i++) { this.x--; }\n`;
+                break;
+            case 'up':
+                message += `    for(let i = 0; i < ${suite * 50}; i++) { this.y--; }\n`;
+                break;
+            case 'down':
+                message += `    for(let i = 0; i < ${suite * 50}; i++) { this.y++; }\n`;
+                break;
+        }
+    
+        message += '}';
+
+        return message;
+    }
+}    
+
+
+class CountdownLoopPlatform extends Platform {
+    constructor(x, y, width, height, color, loopType = 0, sequence = [], door = null) {
+        super(x, y, width, height, color);
+        this.loopCount = 0;
+        this.totalLoopCount = sequence.length;
+        this.canNextIteration = true;
+        this.isVisible = true;
+        this.isActivated = false;
+        this.loopType = loopType;
+        this.sequence = sequence; 
+        this.door = door;
+        this.message = this.generateMessage();
+    }
+
+    update(player) {
+        if (this.isPlayerOnPlatform(player) && !this.isActivated && keys['Semicolon']) {
+            this.isActivated = true;
+            this.canNextIteration = false;
+            this.executeAction(player);
+        }
+        if (this.isVisible) {
+            this.draw();
+        }
+    }
+
+    executeAction(player) {
+        const interval = 500;  // Intervalle de temps entre chaque itération
+
+        const nextIteration = () => {
+            // Vérifie si le joueur est toujours sur la plateforme
+            if (!this.isPlayerOnPlatform(player)) {
+                // Si le joueur n'est plus sur la plateforme, arrête le processus
+                this.loopCount = 0;
+                this.isActivated = false;
+                this.canNextIteration = true;
+                return;
+            }
+
+            if (this.loopCount < this.totalLoopCount) {
+                this.performAction(this.sequence[this.loopCount], player);
+                this.loopCount++;
+                setTimeout(nextIteration, interval);
+            } else {
+                this.loopCount = 0;
+                this.isActivated = false;
+                this.canNextIteration = true;
+            }
+        };
+
+        nextIteration();
+    }
+
+    performAction(action, player) {
+        switch (action) {
+            case "+x":
+                this.x += 50;
+                player.x += 50;
+                break;
+            case "-x":
+                this.x -= 50;
+                player.x -= 50;
+                break;
+            case "+y":
+                this.y += 50;
+                player.y += 50;
+                break;
+            case "-y":
+                this.y -= 50;
+                player.y -= 50;
+                break;
+            case "-health":
+                playerLives--;
+                if (playerLives <= 0) {
+                    resetLevel(); // Vérifie les vies et réinitialise le niveau si nécessaire
+                    return;
+                }
+                break;
+            case "+health":
+                playerLives++;
+                if (playerLives <= 0) {
+                    resetLevel(); // Vérifie les vies et réinitialise le niveau si nécessaire
+                    return;
+                }
+                break;
+            case "jump":
+                player.velocityY = JUMP_POWER;
+                break;
+            case "1.5jump":
+                player.velocityY = 1.5 * JUMP_POWER;
+                break;
+            case "2jump":
+                player.velocityY = 2 * JUMP_POWER;
+                break;
+            case "hide":
+                this.isVisible = false;
+                break;
+            case "show":
+                this.isVisible = true;
+                break;
+            case "open":
+                this.door.open();
+                break;
+            default:
+                console.log(`Unknown action: ${action}`);
+        }
+    }
+
+    generateMessage() {
+        let message = 'action(){\n';
+        switch(this.loopType) {
+            case 0:
+                message += '  for(let i = 0; i < ' + this.totalLoopCount + '; i++) {\n';
+                break;
+            case 1:
+                message += '  let index = 0;\n';
+                message += '  while (index < ' + this.totalLoopCount + ') {\n';
+                break;
+            case 2:
+                message += '  let index = 0;\n';
+                message += '  do {\n';
+                break;
+            default:
+                console.log('Invalid type of loop : ' + this.loopType);
+
+        }
+        message += '    switch(i % ' + this.totalLoopCount + ') {\n';
+        
+        this.sequence.forEach((action, index) => {
+            message += `      case ${index}:\n`;
+            switch (action) {
+                case "+x":
+                    message += '        this.x += 50;\n';
+                    message += '        player.x += 50;\n';
+                    break;
+                case "-x":
+                    message += '        this.x -= 50;\n';
+                    message += '        player.x -= 50;\n';
+                    break;
+                case "+y":
+                    message += '        this.y += 50;\n';
+                    message += '        player.y += 50;\n';
+                    break;
+                case "-y":
+                    message += '        this.y -= 50;\n';
+                    message += '        player.y -= 50;\n';
+                    break;
+                case "-health":
+                    message += '        player.health--;\n';
+                    break;
+                case "+health":
+                    message += '        player.health++;\n';
+                    break;
+                case "open":
+                    message += '        this.door.open();\n';
+                    break;
+                case "jump":
+                    message += '        if(this.isPlayerOnPlatform()){ player.velocityY = JUMP_POWER }\n';
+                    break;
+                case "1.5jump":
+                    message += '        if(this.isPlayerOnPlatform()){ player.velocityY = 1.5 * JUMP_POWER }\n';
+                    break;
+                case "2jump":
+                    message += '        if(this.isPlayerOnPlatform()){ player.velocityY = 2 * JUMP_POWER }\n';
+                    break;
+                case "hide":
+                    message += '        this.isVisible = false;\n';
+                    break;
+                case "show":
+                    message += '        this.isVisible = true;\n';
+                    break;
+                default:
+                    message += `        // Unknown action: ${action}\n`;
+            }
+            message += '        break;\n';
+        });
+
+        message += '    }\n';
+        switch (this.loopType) {
+            case 0 :
+                message += '  }\n';
+                break;
+            case 1 :
+                message += '    index++;\n';
+                message += '  }\n';
+                break;
+            case 2 :
+                message += '    index++;\n';
+                message += `  } while (index < ${this.totalLoopCount})\n`;
+                break;
+        }
+        message += '}';
+
+        return message;
+    }
+}
+
+
+class ActivatePlatform extends Platform {
+    constructor(x, y, width, height, color, targetPlatform) {
+        super(x, y, width, height, color);
+        this.targetPlatform = targetPlatform; // Reference to the MovePlatform to activate
+        this.message = 
+`action(){
+    this.targetPlatform.activate();
+}`;
+    }
+
+    update(player) {
+        if(this.isPlayerOnPlatform(player)) {
+            this.targetPlatform.isDetectedByActivate = true;
+
+            if(keys['Semicolon']) {
+                this.activatePlatform();
+            }
+
+        } else {
+            this.targetPlatform.isDetectedByActivate = false;
+        }
+
+        this.draw();
+    }
+
+    activatePlatform() {
+        this.targetPlatform.activate(); // Call the activate method on the target platform
+
+    }
+
+    isPlayerOnPlatform(player) {
+        return player.y + player.height === this.y &&
+               player.x + player.width > this.x &&
+               player.x < this.x + this.width;
+    }
+}
+
+
+class OpenDoorPlatform extends Platform {
+    constructor(x, y, width, height, color, door) {
+        super(x, y, width, height, color);
+        this.door = door;
+        this.message = 
+`action(){
+    this.door.open();
+}`;
+    }
+
+    update(player) {
+        // Check if the player is on the platform and presses the 'L' key
+        if ((this.isPlayerOnPlatform(player) && keys['Semicolon']) || this.isActivated) {
+            this.openDoor();
+            this.isActivated = false;
         }
 
         this.draw();
@@ -287,10 +879,14 @@ class HorizontalPlatform extends Platform {
                player.x < this.x + this.width;
     }
 
-    moveRight() {
-        this.isMoving = true;
+    openDoor() {
+        this.door.open();
+        console.log('Door opened')
     }
+
+
 }
+
 
 
 function drawRoundedRect(ctx, x, y, width, height, radius) {
@@ -321,9 +917,14 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
 
 
 class StablePlatform extends Platform {
-    constructor(x, y, width, height) {
-        super(x, y, width, height, '', false);
-        this.message = 'This is a stable platform.'; // Message par défaut
+    constructor(x, y, width, height, color) {
+        super(x, y, width, height, color, '', false);
+        this.message = 
+`action(){
+    this.x = this.x;
+    this.y = this.y
+}`;
+ // Message par défaut
     }
 
     update() {
@@ -332,20 +933,47 @@ class StablePlatform extends Platform {
 }
 
 class FallingPlatform extends Platform {
-    constructor(x, y, width, height) {
-        super(x, y, width, height, '', true);
-        this.message = 'This platform will fall if you stand on it.'; // Message par défaut
-    }
-
-    update() {
-        if (this.triggerFall) {
-            this.y += this.fallSpeed;
-            this.fallSpeed += GRAVITY;
-        }
-        this.draw(); // Appelle la méthode draw de la classe parente Platform
+    constructor(x, y, width, height, color) {
+        super(x, y, width, height, color, '', false);
+        this.message = 
+`action(){
+    while(this.y < canvas.height) {
+        this.y++;
     }
 }
+`; // Message par défaut
+        this.fallen = false;
+    }
 
+    update(player) {
+        // super.update(); // Appelle la méthode update de la classe parente Platform
+
+        // console.log('is player on platform ?')
+        // Si le joueur est sur la plateforme et que la touche M est pressée
+        if (this.isPlayerOnPlatform(player) && keys['Semicolon'] && !this.triggerFall) {
+            this.triggerFall = true; // Déclenche la chute de la plateforme
+        }
+
+        // Si la plateforme est en train de tomber
+        if (this.triggerFall && !this.fallen) {
+            this.y += this.fallSpeed;
+            this.fallSpeed += GRAVITY;
+
+            // Si la plateforme atteint le bas de l'écran
+            if (this.y > canvas.height) {
+                this.fallen = true;
+            }
+        }
+
+        this.draw(); // Appelle la méthode draw de la classe parente Platform
+    }
+
+    isPlayerOnPlatform(player) {
+        return player.y + player.height === this.y &&
+               player.x + player.width > this.x &&
+               player.x < this.x + this.width;
+    }
+}
 
 
 class Coin {
@@ -364,47 +992,225 @@ class Coin {
     }
 }
 
+// class Spike {
+//     constructor(x, y, size, angle = 'up') {
+//         this.x = x;
+//         this.y = y;
+//         this.size = size; // Use size to keep it consistent for both width and height
+//         this.spikeHeight = 20; // Height of the spikes (triangles)
+//         this.angle = angle; // New parameter to determine spike orientation
+//     }
+
+//     update(player) {
+//         if (this.checkCollisionWithPlayer(player)) {
+//             playerLives--;
+//             if (playerLives <= 0) {
+//                 // resetLevel(); // Vérifie les vies et réinitialise le niveau si nécessaire
+//                 // return;
+//             } else {
+//                 switch (this.angle) {
+//                     case 'up':
+//                         player.velocityY = JUMP_POWER; // Saut normal vers le haut
+//                         break;
+//                     case 'down':
+//                         player.velocityY = -JUMP_POWER; // Saut vers le bas (peut être utile dans certaines mécaniques)
+//                         break;
+//                     case 'left':
+//                         player.velocityX = -PLAYER_SPEED * 2; // Saut vers la gauche
+//                         player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
+//                         break;
+//                     case 'right':
+//                         player.velocityX = PLAYER_SPEED * 2; // Saut vers la droite
+//                         player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
+//                         break;
+
+//                 }
+//                 player.velocityX = player.x < this.x ? -PLAYER_SPEED : PLAYER_SPEED;
+//             }
+//         }
+
+//         this.draw();
+//     }
+
+//     checkCollisionWithPlayer(player) {
+//         let collision = false;
+
+//         switch (this.angle) {
+//             case 'up':
+//                 collision = (
+//                     player.x < this.x + this.size &&
+//                     player.x + player.width > this.x &&
+//                     player.y < this.y &&
+//                     player.y + player.height > this.y - this.spikeHeight
+//                 );
+//                 break;
+//             case 'down':
+//                 collision = (
+//                     player.x < this.x + this.size &&
+//                     player.x + player.width > this.x &&
+//                     // player.y < this.y + this.spikeHeight &&
+//                     // player.y + player.height > this.y
+//                     player.y < this.y + this.spikeHeight + 15 &&
+//                     player.y > this.y
+//                 );
+//                 break;
+//             case 'left':
+//                 collision = (
+//                     player.x < this.x &&
+//                     player.x + player.width > this.x - this.spikeHeight &&
+//                     player.y < this.y + this.size &&
+//                     player.y + player.height > this.y
+//                 );
+//                 break;
+//             case 'right':
+//                 collision = (
+//                     player.x < this.x + this.spikeHeight &&
+//                     player.x + player.width > this.x &&
+//                     player.y < this.y + this.size &&
+//                     player.y + player.height > this.y
+//                 );
+//                 break;
+//         }
+
+//         return collision;
+//     }
+
+//     draw() {
+//         ctx.fillStyle = 'black';
+
+//         for (let i = 0; i < this.size; i += this.spikeHeight) {
+//             ctx.beginPath();
+//             switch (this.angle) {
+//                 case 'up':
+//                     ctx.moveTo(this.x + i, this.y);
+//                     ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y - this.spikeHeight);
+//                     ctx.lineTo(this.x + i + this.spikeHeight, this.y);
+//                     break;
+//                 case 'down':
+//                     ctx.moveTo(this.x + i, this.y + this.spikeHeight);
+//                     ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y + 2 * this.spikeHeight);
+//                     ctx.lineTo(this.x + i + this.spikeHeight, this.y + this.spikeHeight);
+//                     break;
+//                 case 'left':
+//                     ctx.moveTo(this.x, this.y + i);
+//                     ctx.lineTo(this.x - this.spikeHeight, this.y + i + this.spikeHeight / 2);
+//                     ctx.lineTo(this.x, this.y + i + this.spikeHeight);
+//                     break;
+//                 case 'right':
+//                     ctx.moveTo(this.x + this.spikeHeight, this.y + i);
+//                     ctx.lineTo(this.x + 2 * this.spikeHeight, this.y + i + this.spikeHeight / 2);
+//                     ctx.lineTo(this.x + this.spikeHeight, this.y + i + this.spikeHeight);
+//                     break;
+//             }
+//             ctx.closePath();
+//             ctx.fill();
+//         }
+//     }
+// }
 class Spike {
-    constructor(x, y, width) {
+    constructor(x, y, size, angle = 'up') {
         this.x = x;
         this.y = y;
-        this.width = width;
-        this.height = 0;
-        this.spikeHeight = 20; // Height of the spikes (triangles) on top of the spike
+        this.size = size; // Use size to keep it consistent for both width and height
+        this.spikeHeight = 20; // Height of the spikes (triangles)
+        this.angle = angle; // New parameter to determine spike orientation
     }
 
     update(player) {
-        // Check collision with the player
         if (this.checkCollisionWithPlayer(player)) {
+            // Décrémenter la vie du joueur
             playerLives--;
-            // Add knockback effect to the player
-            player.velocityY = JUMP_POWER / 2;
-            player.velocityX = player.x < this.x ? -PLAYER_SPEED : PLAYER_SPEED;
+            
+            // Définir le saut en fonction de l'angle du spike
+            switch (this.angle) {
+                case 'up':
+                    player.velocityY = JUMP_POWER; // Saut normal vers le haut
+                    break;
+                case 'down':
+                    player.velocityY = -JUMP_POWER; // Saut vers le bas (peut être utile dans certaines mécaniques)
+                    break;
+                case 'left':
+                    player.velocityX = -80; // Saut vers la gauche
+                    player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
+                    break;
+                case 'right':
+                    player.velocityX = 80; // Saut vers la droite
+                    player.velocityY = 0; // Annuler le saut vertical pour un mouvement horizontal pur
+                    break;
+            }
         }
 
         this.draw();
     }
 
     checkCollisionWithPlayer(player) {
-        return (
-            player.x < this.x + this.width &&
-            player.x + player.width > this.x &&
-            player.y < this.y + this.height &&
-            player.y + player.height > this.y
-        );
+        let collision = false;
+
+        switch (this.angle) {
+            case 'up':
+                collision = (
+                    player.x < this.x + this.size &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y &&
+                    player.y + player.height > this.y - this.spikeHeight
+                );
+                break;
+            case 'down':
+                collision = (
+                    player.x < this.x + this.size &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.spikeHeight + 15 &&
+                    player.y > this.y
+                );
+                break;
+            case 'left':
+                collision = (
+                    player.x < this.x &&
+                    player.x + player.width > this.x - this.spikeHeight &&
+                    player.y < this.y + this.size &&
+                    player.y + player.height > this.y
+                );
+                break;
+            case 'right':
+                collision = (
+                    player.x < this.x + this.spikeHeight &&
+                    player.x + player.width > this.x &&
+                    player.y < this.y + this.size &&
+                    player.y + player.height > this.y
+                );
+                break;
+        }
+
+        return collision;
     }
 
     draw() {
-        // Draw the base rectangle of the spike
         ctx.fillStyle = 'black';
-        ctx.fillRect(this.x, this.y, this.width, this.height);
 
-        // Draw the spikes on top of the spike
-        for (let i = 0; i < this.width; i += this.spikeHeight) {
+        for (let i = 0; i < this.size; i += this.spikeHeight) {
             ctx.beginPath();
-            ctx.moveTo(this.x + i, this.y); // Bottom left of the triangle
-            ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y - this.spikeHeight); // Top of the triangle
-            ctx.lineTo(this.x + i + this.spikeHeight, this.y); // Bottom right of the triangle
+            switch (this.angle) {
+                case 'up':
+                    ctx.moveTo(this.x + i, this.y);
+                    ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y - this.spikeHeight);
+                    ctx.lineTo(this.x + i + this.spikeHeight, this.y);
+                    break;
+                case 'down':
+                    ctx.moveTo(this.x + i, this.y + this.spikeHeight);
+                    ctx.lineTo(this.x + i + this.spikeHeight / 2, this.y + 2 * this.spikeHeight);
+                    ctx.lineTo(this.x + i + this.spikeHeight, this.y + this.spikeHeight);
+                    break;
+                case 'left':
+                    ctx.moveTo(this.x, this.y + i);
+                    ctx.lineTo(this.x - this.spikeHeight, this.y + i + this.spikeHeight / 2);
+                    ctx.lineTo(this.x, this.y + i + this.spikeHeight);
+                    break;
+                case 'right':
+                    ctx.moveTo(this.x + this.spikeHeight, this.y + i);
+                    ctx.lineTo(this.x + 2 * this.spikeHeight, this.y + i + this.spikeHeight / 2);
+                    ctx.lineTo(this.x + this.spikeHeight, this.y + i + this.spikeHeight);
+                    break;
+            }
             ctx.closePath();
             ctx.fill();
         }
@@ -412,24 +1218,32 @@ class Spike {
 }
 
 class Door {
-    constructor(x, y, width, height) {
+    constructor(x, y, width, height, isOpen) {
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
-        this.isOpen = true; // La porte est fermée par défaut
+        this.isOpen = isOpen; // The door is closed by default
     }
 
     update(player) {
-        // Vérifier si le joueur est près de la porte et appuie sur 'E'
-        if (this.isPlayerNear(player)) {
-            console.log('near');
-            
-            this.isOpen = true;
+        if (this.isPlayerNear(player) && this.isOpen) {
             this.goToNextLevel();
         }
 
         this.draw();
+    }
+
+    toggleOpen() {
+        this.isOpen = !this.isOpen;
+    }
+
+    open() {
+        this.isOpen = true;
+    }
+
+    close() {
+        this.isOpen = false;
     }
 
     isPlayerNear(player) {
@@ -446,12 +1260,20 @@ class Door {
         if (currentLevel < levels.length) {
             loadLevel(currentLevel);
         } else {
-            console.log("You've completed all levels!");
+            // All levels are completed
+            this.showCompletionMessage();
+            cancelAnimationFrame(animationFrameId); // Stop the animation
+            messageBox.style.display = 'block'; // Display the message box
+            isGamePaused = true; // Pause the game
         }
     }
 
+    showCompletionMessage() {
+        messageBox.textContent = 'Congratulations! You have completed all the levels!';
+    }
+
     draw() {
-        ctx.fillStyle = this.isOpen ? 'green' : 'brown';
+        ctx.fillStyle = this.isOpen ? 'green' : 'grey';
         ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 }
@@ -461,6 +1283,7 @@ class Door {
 function drawGrid() {
     ctx.strokeStyle = 'grey';
     ctx.lineWidth = 0.5;
+    ctx.setLineDash([5, 5]); // 5 pixels line, 5 pixels space
 
     // Dessiner les lignes verticales
     for (let x = 0; x <= canvas.width; x += 50) {
@@ -504,55 +1327,342 @@ function createYAxis() {
 createXAxis();
 createYAxis();
 
+function drawGrid() {
+    ctx.strokeStyle = 'lightgrey';
+    ctx.lineWidth = 0.5;
+
+    // Dessiner les lignes verticales
+    for (let x = 0; x <= canvas.width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+
+    // Dessiner les lignes horizontales
+    for (let y = 0; y <= canvas.height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+}
+
+// MOUSE
+
+canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    checkClickOnBlocks(mouseX, mouseY);
+});
+
+function checkClickOnBlocks(mouseX, mouseY) {
+    // Vérifier les plateformes
+    for (let platform of platforms) {
+        if (mouseX >= platform.x && mouseX <= platform.x + platform.width &&
+            mouseY >= platform.y && mouseY <= platform.y + platform.height) {
+            if (platform.message) {
+                messageBox.innerHTML = `<pre><code class="language-js">${platform.message}</code></pre>`;
+                Prism.highlightAll();
+            }
+        }
+    }
+
+    // Vérifier les ennemis (si nécessaire)
+    for (let enemy of enemies) {
+        if (mouseX >= enemy.x && mouseX <= enemy.x + enemy.width &&
+            mouseY >= enemy.y && mouseY <= enemy.y + enemy.height) {
+            // Affichez le message de l'ennemi si nécessaire
+        }
+    }
+
+    // Vérifier les murs
+    for (let wall of walls) {
+        if (mouseX >= wall.x && mouseX <= wall.x + wall.width &&
+            mouseY >= wall.y && mouseY <= wall.y + wall.height) {
+            // Affichez le message du mur si nécessaire
+        }
+    }
+
+    // Vérifier d'autres types de blocs si nécessaire
+}
+
+
+
 const levels = [
+    // Level 4
     {
-        player: { x: 100, y: 250 },
+        _player: { x: 350, y: 350 },
+        get player() {
+            return this._player;
+        },
+        set player(value) {
+            this._player = value;
+        },  
         platforms: [
-            { type: 'HorizontalPlatform', x: 50, y: 350, width: 100, height: 20, distance: 3 },
-            { type: 'StablePlatform', x: 150, y: 250, width: 100, height: 20 },
-            { type: 'StablePlatform', x: 50, y: 150, width: 100, height: 20 },
+            // door
+            { type: 'CountdownLoopPlatform', x: 150, y: 100, width: 100, height: 20, color: [0,0,50], loopType: 0, sequence: ['+x', '+health', '2jump']},
+            { type: 'CountdownLoopPlatform', x: 100, y: 200, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['+x', '-health', 'open']},
+            { type: 'CountdownLoopPlatform', x: 50, y: 300, width: 100, height: 20, color: [0,0,50], loopType: 2, sequence: ['-health', '+x','+x', '1.5jump']},
             
-            { type: 'StablePlatform', x: 550, y: 350, width: 100, height: 20 }
+            { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+            { type: 'CountdownLoopPlatform', x: 600, y: 250, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['-x', '-x', '2jump']},
         ],
         enemies: [
             // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
         ],
         coins: [
-            { x: 250, y: 270, radius: 10 }
+
+            { x: 400, y: 75, radius: 10 },
+            { x: 450, y: 75, radius: 10 },
+            { x: 500, y: 75, radius: 10 },
+
+            { x: 400, y: 125, radius: 10 },
+            { x: 450, y: 125, radius: 10 },
+            { x: 500, y: 125, radius: 10 },
         ],
         spikes: [
-            { x: 550, y: 150, width: 100 }, // Example spike in this level
-            { x: 550, y: 250, width: 100 } // Example spike in this level
+            // { x: 0, y: -30, width: 550, angle: 'down' },
+            // { x: 0, y: 415, width: 700, angle: 'up' },
+            // { x: 550, y: 0, width: 300, angle: 'left' }, 
+
+            
         ],
         doors: [
-            { x: 580, y: 300, width: 40, height: 50 } // Example Door
+            { x: 400, y: 350, width: 50, height: 50, isOpen: true }
+        ],
+        walls: [
+            // { x: 550, y: 0, width: 10, height: 300 }, 
+            // { x: 350, y: 150, width: 100, height: 50 }, 
         ]
     },
-    {
-        player: { x: 100, y: 250 },
-        platforms: [
-            { type: 'HorizontalPlatform', x: 50, y: 350, width: 100, height: 20, distance: 3 },
-            { type: 'StablePlatform', x: 150, y: 250, width: 100, height: 20 },
-            { type: 'StablePlatform', x: 50, y: 150, width: 100, height: 20 },
+    // {
+    //     _player: { x: 125, y: 50 },
+    //     get player() {
+    //         return this._player;
+    //     },
+    //     set player(value) {
+    //         this._player = value;
+    //     },  
+    //     platforms: [
+    //         // door
+    //         { type: 'CountdownLoopPlatform', x: 150, y: 100, width: 100, height: 20, color: [0,0,50], loopType: 0, sequence: ['+x', '+health', '2jump']},
+    //         { type: 'CountdownLoopPlatform', x: 100, y: 200, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['+x', '-health', 'open']},
+    //         { type: 'CountdownLoopPlatform', x: 50, y: 300, width: 100, height: 20, color: [0,0,50], loopType: 2, sequence: ['-health', '+x','+x', '1.5jump']},
             
-            { type: 'StablePlatform', x: 550, y: 350, width: 100, height: 20 }
-        ],
-        enemies: [
-            // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
-        ],
-        coins: [
-            { x: 250, y: 270, radius: 10 }
-        ],
-        spikes: [
-            { x: 550, y: 150, width: 100 }, // Example spike in this level
-            { x: 550, y: 250, width: 100 } // Example spike in this level
-        ],
-        doors: [
-            { x: 580, y: 300, width: 40, height: 50 } // Example Door
-        ]
-    }
-    // Ajoutez plus de niveaux ici
+    //         { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+    //         { type: 'CountdownLoopPlatform', x: 600, y: 250, width: 100, height: 20, color: [0,0,50], loopType: 1, sequence: ['-x', '-x', '2jump']},
+    //     ],
+    //     enemies: [
+    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+    //     ],
+    //     coins: [
+
+    //         { x: 400, y: 75, radius: 10 },
+    //         { x: 450, y: 75, radius: 10 },
+    //         { x: 500, y: 75, radius: 10 },
+
+    //         { x: 400, y: 125, radius: 10 },
+    //         { x: 450, y: 125, radius: 10 },
+    //         { x: 500, y: 125, radius: 10 },
+    //     ],
+    //     spikes: [
+    //         { x: 0, y: -30, width: 550, angle: 'down' },
+    //         { x: 0, y: 415, width: 700, angle: 'up' },
+    //         { x: 550, y: 0, width: 300, angle: 'left' }, 
+
+            
+    //     ],
+    //     doors: [
+    //         { x: 625, y: 100, width: 50, height: 50, isOpen: false }
+    //     ],
+    //     walls: [
+    //         // { x: 550, y: 0, width: 10, height: 300 }, 
+    //         // { x: 350, y: 150, width: 100, height: 50 }, 
+    //     ]
+    // },
+    // Level 3
+    // {
+    //     _player: { x: 625, y: 250 },
+    //     get player() {
+    //         return this._player;
+    //     },
+    //     set player(value) {
+    //         this._player = value;
+    //     },  
+    //     platforms: [
+    //         // door
+    //         { type: 'StablePlatform', x: 0, y: 100, width: 100, height: 20},
+
+    //         { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 0, 50]},
+
+    //         // { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
+    //         { type: 'MovePlatform', x: 450, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
+    //         { type: 'CountdownLoopPlatform', x: 600, y: 300, width: 100, height: 20, color: [0,0,50], 0, sequence: ['-x', 'jump', '1.5jump', '2jump']},
+    //     ],
+    //     enemies: [
+    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+    //     ],
+    //     coins: [
+    //         { x: 650, y: 50, radius: 10 },
+    //         { x: 650, y: 100, radius: 10 },
+    //         { x: 650, y: 150, radius: 10 },
+
+    //         { x: 375, y: 125, radius: 10 },
+    //         { x: 425, y: 125, radius: 10 },
+    //     ],
+    //     spikes: [
+    //         { x: 0, y: -30, width: 700, angle: 'down' },
+    //         { x: 0, y: 415, width: 700, angle: 'up' },
+            
+    //     ],
+    //     doors: [
+    //         { x: 25, y: 50, width: 50, height: 50, isOpen: false }
+    //     ],
+    //     walls: [
+    //         { x: 600, y: 0, width: 100, height: 10 }, 
+    //         { x: 350, y: 150, width: 100, height: 50 }, 
+    //     ]
+    // },
+    // Level 5
+    // {
+    //     // haut
+    //     // _player: { x: 325, y: 0 },
+    //     // haut à droite
+    //     // _player: { x: 550, y: 0 },
+    //     // bas à droite
+    //     _player: { x: 575, y: 300 },
+    //     get player() {
+    //         return this._player;
+    //     },
+    //     set player(value) {
+    //         this._player = value;
+    //     },
+    //     platforms: [
+    //         { type: 'LoopMovePlatform', x: 300, y: 50, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'left', 'down', 'right', 'right', 'down', 'down', 'up', 'right']},
+    //         { type: 'LoopMovePlatform', x: 550, y: 100, width: 100, height: 20, color: [0,0,50], sequence: ['left', 'down', 'right', 'down', 'down', 'up', 'right']},
+    //         { type: 'LoopMovePlatform', x: 0, y: 350, width: 100, height: 20, color: [0,0,50], sequence: ['up', 'up', 'right', 'down', 'down', 'up', 'left']},
+    //         { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: -1, distanceY: 0, color: [0,0,50]},
+    //         { type: 'MovePlatform', x: 550, y: 350, width: 100, height: 20, distanceX: 0, distanceY: -1, color: [0,0,50]},
+    //         { type: 'MovePlatform', x: 100, y: 100, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+            
+    //     ],
+    //     enemies: [
+    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+    //     ],
+    //     coins: [
+    //         // { x: 100, y: 300, radius: 10 },
+    //     ],
+    //     spikes: [
+    //         // Bas à gauche
+    //         { x: 100, y: 150, width: 100, angle: 'up' },
+    //         { x: 180, y: 150, width: 100, angle: 'right' },
+    //         { x: 210, y: 250, width: 90, angle: 'up' },
+
+    //         // Bas
+    //         { x: 0, y: 410, width: 700, angle: 'up' },
+            
+    //         // Droite
+    //         { x: 450, y: 200, width: 50, angle: 'up' },
+    //         { x: 450, y: 240, width: 50, angle: 'down' },
+            
+    //     ],
+    //     doors: [
+    //         { x: 450, y: 200, width: 50, height: 50, isOpen: true }
+    //     ],
+    //     walls: [
+    //         // sous porte
+    //         { x: 450, y: 250, width: 50, height: 10 }, 
+    //         { x: 500, y: 200, width: 10, height: 60 }, 
+    //     ]
+    // },
+    // level 2
+    // {
+    //     _player: { x: 280, y: 280 },
+    //     get player() {
+    //         return this._player;
+    //     },
+    //     set player(value) {
+    //         this._player = value;
+    //     },
+    //     platforms: [
+    //         { type: 'MovePlatform', x: 250, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], id: 'right-1'},
+    //         // { type: 'MovePlatform', x: 300, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50]},
+    //         { type: 'TeleportPlatform', x: 550, y: 360, width: 100, height: 20, distanceX: 0, distanceY: -150, color: [0,0,50], id: 'teleport-up-1'},
+    //         { type: 'TeleportPlatform', x: 50, y: 50, width: 100, height: 20, distanceX: 0, distanceY: 150, color: [0,0,50]},
+            
+    //         // { type: 'FallingPlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50]},
+    //         // { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 200, 0], id: 'horizontal-1' },
+    //         { type: 'ActivatePlatform', x: 400, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'right-1'},
+    //         { type: 'ActivatePlatform', x: 200, y: 200, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [0,0,50], targetId: 'teleport-up-1'},
+    //         //doors
+    //         // { type: 'FallingPlatform', x: 50, y: 350, width: 100, height: 20},
+    //         // { type: 'StablePlatform', x: 550, y: 350, width: 100, height: 20}
+    //     ],
+    //     enemies: [
+    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+    //     ],
+    //     coins: [
+    //         // Bas
+    //         { x: 100, y: 300, radius: 10 },
+    //         { x: 150, y: 300, radius: 10 },
+    //         { x: 100, y: 350, radius: 10 },
+    //         { x: 150, y: 350, radius: 10 },
+    //         { x: 125, y: 325, radius: 10 },
+    //         // Haut
+    //         { x: 600, y: 60, radius: 10 },
+    //         { x: 500, y: 60, radius: 10 },
+    //         { x: 400, y: 60, radius: 10 },
+    //         { x: 300, y: 60, radius: 10 },
+    //         { x: 200, y: 60, radius: 10 },
+    //     ],
+    //     spikes: [
+    //         { x: 0, y: 410, width: 700 }
+    //     ],
+    //     doors: [
+    //         // test pour isOpen
+    //         { x: 320, y: 160, width: 60, height: 100, isOpen: true } // Example Door
+    //     ],
+    //     walls: [
+    //         { x: 0, y: 250, width: 700, height: 10 }, // Example wall
+    //         { x: 0, y: 100, width: 700, height: 10 }, // Example wall
+    //     ]
+    // },
+    // level 1
+    // {
+    //     player: { x: 100, y: 250 },
+    //     platforms: [
+    //         { type: 'MovePlatform', x: 50, y: 150, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50] },
+    //         { type: 'OpenDoorPlatform', x: 150, y: 250, width: 100, height: 20, color: [0, 200, 0]},
+    //         { type: 'MovePlatform', x: 50, y: 350, width: 100, height: 20, distanceX: 1, distanceY: 0, color: [250,0,50]},
+    //         //door
+    //         { type: 'StablePlatform', x: 550, y: 150, width: 100, height: 20 }
+    //     ],
+    //     enemies: [
+    //         // { x: 300, y: 350, width: 50, height: 50, speed: 2 }
+    //     ],
+    //     coins: [
+    //         { x: 200, y: 225, radius: 10 },
+    //         { x: 100, y: 125, radius: 10 },
+    //         { x: 200, y: 125, radius: 10 },
+    //         { x: 300, y: 125, radius: 10 },
+    //         { x: 400, y: 125, radius: 10 },
+    //         { x: 500, y: 125, radius: 10 },
+    //     ],
+    //     spikes: [
+    //         { x: 550, y: 350, width: 100 }, // Example spike in this level
+    //         { x: 550, y: 250, width: 100 } // Example spike in this level
+    //     ],
+    //     doors: [
+    //         // test pour isOpen
+    //         { x: 580, y: 100, width: 40, height: 50, isOpen: false } // Example Door
+    //     ]
+    // }
 ];
+
+
 
 const player = new Player(100, 300);
 const enemies = [];
@@ -560,6 +1670,18 @@ const platforms = [];
 const coins = [];
 const spikes = [];
 const doors = [];
+const walls = [];
+
+const platformClasses = {
+    MovePlatform,
+    ActivatePlatform,
+    OpenDoorPlatform,
+    StablePlatform,
+    FallingPlatform,
+    TeleportPlatform,
+    CountdownLoopPlatform
+};
+
 
 function loadLevel(levelIndex) {
     const levelData = levels[levelIndex];
@@ -569,20 +1691,59 @@ function loadLevel(levelIndex) {
     enemies.length = 0;
     coins.length = 0;
     spikes.length = 0;
+    doors.length = 0;
+    walls.length = 0;
+
+    levelData.doors.forEach(data => {
+        doors.push(new Door(data.x, data.y, data.width, data.height, data.isOpen));
+    })
+    levelData.walls.forEach(data => {
+        walls.push(new Wall(data.x, data.y, data.width, data.height));
+    });
 
     // Positionner le joueur
     player.x = levelData.player.x;
     player.y = levelData.player.y;
 
+    const platformMap = {}; // To map platforms by ID
+
+
     // Créer les plateformes
     levelData.platforms.forEach(data => {
-        if (data.type === 'FallingPlatform') {
-            platforms.push(new FallingPlatform(data.x, data.y, data.width, data.height));
-        } else if (data.type === 'StablePlatform') {
-            platforms.push(new StablePlatform(data.x, data.y, data.width, data.height));
-        } else if (data.type === 'HorizontalPlatform') {
-            platforms.push(new HorizontalPlatform(data.x, data.y, data.width, data.height, data.distance));
+        let platform;
+        switch(data.type) {
+            case 'FallingPlatform':
+                platform = new FallingPlatform(data.x, data.y, data.width, data.height, data.color);
+                break;
+            case 'StablePlatform':
+                platform = new StablePlatform(data.x, data.y, data.width, data.height, data.color);
+                break;
+            case 'MovePlatform':
+                platform = new MovePlatform(data.x, data.y, data.width, data.height, data.color, data.distanceX, data.distanceY);
+                break;
+            case 'LoopMovePlatform':
+                platform = new LoopMovePlatform(data.x, data.y, data.width, data.height, data.color, data.sequence);
+                break;
+            case 'CountdownLoopPlatform':
+                let door = doors[0];
+                platform = new CountdownLoopPlatform(data.x, data.y, data.width, data.height, data.color, data.loopType, data.sequence, door);
+                break;
+            case 'TeleportPlatform':
+                platform = new TeleportPlatform(data.x, data.y, data.width, data.height, data.color, data.distanceX, data.distanceY);
+                break;
+            case 'ActivatePlatform':
+                const targetPlatform = platformMap[data.targetId];
+                platform = new ActivatePlatform(data.x, data.y, data.width, data.height, data.color, targetPlatform);
+                break;
+            case 'OpenDoorPlatform':
+                door = doors[0];
+                platform = new OpenDoorPlatform(data.x, data.y, data.width, data.height, data.color, door);
+                break;
         }
+        if (data.id) {
+            platformMap[data.id] = platform;
+        }
+        platforms.push(platform);
     });
 
     // Créer les ennemis
@@ -597,14 +1758,10 @@ function loadLevel(levelIndex) {
 
     // Créer les piques
     levelData.spikes.forEach(data => {
-        spikes.push(new Spike(data.x, data.y, data.width, data.height));
-    });
-
-    // Créer les portes
-    levelData.doors.forEach(data => {
-        doors.push(new Door(data.x, data.y, data.width, data.height));
+        spikes.push(new Spike(data.x, data.y, data.width, data.angle));
     });
 }
+
 
 
 let currentLevel = 0;
@@ -617,40 +1774,52 @@ const platformShapes = {
 }
 
 
+function resetLevel() {
+    playerLives = 3;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    
+    collectedCoins = Math.max(0, collectedCoins - 5);
+    
+    loadLevel(currentLevel);
+}
+
+let animationFrameId;
 
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Grille
+    // Dessiner la grille
     drawGrid();
 
-    // Joueur, ennemis, plateformes, pièces
-    player.update(platforms, coins, enemies);
-    enemies.forEach(enemy => enemy.update());
-    platforms.forEach(platform => platform.update(player));
-    coins.forEach(coin => coin.draw());
-    spikes.forEach(spike => spike.update(player));
+    // Mise à jour des portes
     doors.forEach(door => door.update(player));
 
-    // Textes
+    // Mise à jour du joueur
+    player.update(platforms, coins, enemies, walls);
+    
+    // Mise à jour des plateformes
+    platforms.forEach(platform => platform.update(player, walls));
+    
+    // Dessiner les pièces
+    coins.forEach(coin => coin.draw());
+    spikes.forEach(spike => spike.update(player));
+    
+    // Dessiner les murs
+    walls.forEach(wall => wall.draw());
+
+    // Afficher le nombre de pièces collectées et les vies restantes
     ctx.fillStyle = 'black';
     ctx.font = '20px Arial';
     ctx.fillText(`Coins: ${collectedCoins}`, canvas.width - 100, 30);
-
-    ctx.fillStyle = 'black';
     ctx.fillText(`Lives: ${playerLives}`, 10, 30);
 
-    // Vérifier si le joueur a collecté toutes les pièces pour passer au niveau suivant
-    if (coins.length === 0) {
-        currentLevel++;
-        if (currentLevel < levels.length) {
-            loadLevel(currentLevel);
-        } else {
-            console.log("You've completed all levels!");
-        }
-    }
+    if(isGamePaused) return;
 
-    requestAnimationFrame(gameLoop);
+    // Capturer l'ID de la frame pour pouvoir l'arrêter plus tard
+    animationFrameId = requestAnimationFrame(gameLoop);
+
 }
+
 
 gameLoop();
